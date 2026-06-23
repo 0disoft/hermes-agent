@@ -1690,6 +1690,41 @@ export function ChatBar({
     }
   }, [autoDrainNext, busy, queuedPrompts.length])
 
+  // Esc cancels the in-flight turn when the CHAT has focus — not just the
+  // composer input (which has its own handler above). Clicking into the
+  // transcript and hitting Esc now stops the run, matching the Stop button.
+  // Intentional only: we bail if (a) the composer/another field already
+  // handled Esc (defaultPrevented), (b) focus is in any input/textarea/
+  // contenteditable (you're typing, not stopping), or (c) a dialog/popover is
+  // open — Esc must close that overlay, never double as canceling the stream
+  // behind it. A latest-handler ref keeps the listener registered once.
+  const escCancelRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => {})
+  escCancelRef.current = (event: globalThis.KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !busy) {
+      return
+    }
+
+    const active = document.activeElement as HTMLElement | null
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+      return
+    }
+
+    if (document.querySelector('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]')) {
+      return
+    }
+
+    event.preventDefault()
+    triggerHaptic('cancel')
+    void Promise.resolve(onCancel())
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => escCancelRef.current(event)
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   // Queue-edit cleanup: on session swap the scope effect already stashed the
   // edit snapshot; only restore into the composer when still on the same scope.
   useEffect(() => {

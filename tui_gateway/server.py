@@ -3114,57 +3114,6 @@ def _on_tool_start(sid: str, tool_call_id: str, name: str, args: dict):
         _emit("tool.start", sid, payload)
 
 
-def _maybe_reanchor_session_from_terminal_result(sid: str, session: dict | None, result_obj: object) -> None:
-    """Sync sidebar/session cwd anchor to terminal's effective cwd.
-
-    Session grouping in `projects.project_sessions` keys off persisted session
-    `cwd` + `git_branch`, while terminal transcript lines can reflect a newer
-    in-turn `cd`. When those diverge, the sidebar lane and transcript context
-    disagree ("why is this test1 session under main?"). Terminal now reports its
-    post-command cwd; apply it here so branch lanes stay truthful.
-    """
-    if session is None or not isinstance(result_obj, dict):
-        return
-
-    # Background starts return a process/session id but do not carry a completed
-    # shell-state transition. Keep the anchor unchanged until a foreground tool
-    # result reports an actual cwd.
-    if result_obj.get("session_id"):
-        return
-
-    next_cwd = str(result_obj.get("cwd") or "").strip()
-    if not next_cwd:
-        return
-
-    prev_cwd = str(session.get("cwd") or "").strip()
-    if next_cwd == prev_cwd:
-        return
-
-    session["cwd"] = next_cwd
-    session["explicit_cwd"] = True
-    _register_session_cwd(session)
-
-    with _session_db(session) as db:
-        if db is not None:
-            try:
-                db.update_session_cwd(session.get("session_key", ""), next_cwd)
-            except Exception:
-                logger.debug("failed to persist session cwd from terminal result", exc_info=True)
-
-    _persist_session_git_meta(session, next_cwd)
-
-    try:
-        agent = session.get("agent")
-        info = (
-            _session_info(agent, session)
-            if agent is not None
-            else {"cwd": next_cwd, "branch": _git_branch_for_cwd(next_cwd), "lazy": True}
-        )
-        _emit("session.info", sid, info)
-    except Exception:
-        logger.debug("failed to emit session.info after terminal cwd reanchor", exc_info=True)
-
-
 def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result: str):
     payload = {"tool_id": tool_call_id, "name": name, "args": args}
     session = _sessions.get(sid)
@@ -3180,8 +3129,6 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
         payload["result"] = json.loads(result)
     except Exception:
         payload["result"] = result
-    if name == "terminal":
-        _maybe_reanchor_session_from_terminal_result(sid, session, payload["result"])
     summary = _tool_summary(name, result, duration_s)
     if summary:
         payload["summary"] = summary

@@ -42,7 +42,7 @@ describe('summarizeShellCommand', () => {
   })
 
   it('does not strip a redirection-looking char inside quotes', () => {
-    expect(summarizeShellCommand('cd /x && echo "a > b"')).toBe('echo "a > b"')
+    expect(summarizeShellCommand('cd /x && git commit -m "a > b"')).toBe('git commit -m "a > b"')
   })
 
   it('handles empty / whitespace input', () => {
@@ -57,5 +57,22 @@ describe('summarizeShellCommand', () => {
 
   it('collapses 2>&1 redirection on a plain pipeline', () => {
     expect(summarizeShellCommand('cd /x && tsc --noEmit 2>&1 | tail -20')).toBe('tsc --noEmit')
+  })
+
+  it('drops a leading echo banner around a single command', () => {
+    expect(
+      summarizeShellCommand('echo "--- proto pnpm direct ---"; ~/.proto/tools/node/24.11.0/bin/pnpm --version 2>&1 | tail -3')
+    ).toBe('~/.proto/tools/node/24.11.0/bin/pnpm --version')
+  })
+
+  it('drops echo banners on both sides plus the trailing status echo', () => {
+    expect(summarizeShellCommand('echo start; npm run build 2>&1 | tail -5; echo "build_exit=$?"')).toBe(
+      'npm run build'
+    )
+  })
+
+  it('keeps a genuine multi-command probe untouched', () => {
+    const probe = 'which node pnpm corepack; node -v; corepack --version 2>&1'
+    expect(summarizeShellCommand(probe)).toBe(probe)
   })
 })

@@ -67,10 +67,10 @@ function headWord(segment: string): string {
   return basename(tokens[index] ?? '')
 }
 
-// A trailing `echo "..._exit=$?"` / `echo $?` the agent appends to surface the
-// real exit code through a pipe — pure plumbing, never the point of the command.
-const isStatusEcho = (segment: string): boolean =>
-  headWord(segment) === 'echo' && /(?:_exit=|\$\?|\$\{?PIPESTATUS)/.test(segment)
+// `echo` segments — banner separators (`echo "--- step ---"`) and status
+// captures (`echo "x_exit=$?"`) the agent sprinkles around real work. `echo`
+// never does work, so dropping it at either boundary can't hide a command.
+const isEcho = (segment: string): boolean => headWord(segment) === 'echo'
 
 // Drop redirections (`2>&1`, `> log`, `>> out`, `< in`) from the chosen segment.
 // Skipped when the segment contains quotes, so a `>` inside an argument is safe.
@@ -95,8 +95,9 @@ function stripRedirections(segment: string): string {
  * one giant regex:
  *
  *   1. split into segments on top-level `&&` `||` `;` `|` (quote-aware)
- *   2. drop leading setup segments (`cd`, `export`, `source`, env assignments…)
- *   3. drop trailing pager / status-echo segments (`tail`, `head`, `echo $?`…)
+ *   2. drop leading setup / banner segments (`cd`, `export`, `source`, env
+ *      assignments, `echo "--- step ---"`…)
+ *   3. drop trailing pager / echo segments (`tail`, `head`, `echo $?`…)
  *   4. strip redirections from the one segment that's left
  *
  * Deliberately conservative: if more than one "real" command survives (a genuine
@@ -120,14 +121,14 @@ export function summarizeShellCommand(raw: string): string {
   let start = 0
   let end = segments.length
 
-  while (start < end && SILENT_HEADS.has(headWord(segments[start]!))) {
+  while (start < end && (SILENT_HEADS.has(headWord(segments[start]!)) || isEcho(segments[start]!))) {
     start += 1
   }
 
   while (
     end > start &&
     (PAGER_HEADS.has(headWord(segments[end - 1]!)) ||
-      isStatusEcho(segments[end - 1]!) ||
+      isEcho(segments[end - 1]!) ||
       SILENT_HEADS.has(headWord(segments[end - 1]!)))
   ) {
     end -= 1

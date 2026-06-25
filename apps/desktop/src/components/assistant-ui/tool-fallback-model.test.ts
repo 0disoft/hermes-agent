@@ -178,6 +178,19 @@ describe('buildToolView title actions', () => {
     expect(view.subtitle).toBe('')
   })
 
+  it('uses the requested positive offset/limit for read_file row line ranges', () => {
+    const view = buildToolView(
+      part({
+        args: { limit: 5, offset: 1, path: './package.json' },
+        result: { content: '1|{\n2|  "name": "bb-rainbows",\n3|  "private": true,\n4|  "version": "0.0.1",\n5|  "type": "module",\n6|  "description": "extra"' },
+        toolName: 'read_file'
+      }),
+      ''
+    )
+
+    expect(view.title).toBe('Read package.json L1-5')
+  })
+
   it('uses returned line numbers for negative-offset read_file rows', () => {
     const view = buildToolView(
       part({

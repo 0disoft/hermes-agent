@@ -138,6 +138,16 @@ function readFileLineLabel(args: Record<string, unknown>, result: Record<string,
   }
 
   const content = firstStringField(result, ['content'])
+  const offset = numericField(args, 'offset')
+  const limit = numericField(args, 'limit')
+
+  if (offset !== undefined && offset > 0) {
+    if (limit === undefined || limit <= 1) {
+      return `L${offset}`
+    }
+
+    return `L${offset}-${offset + limit - 1}`
+  }
 
   const lines = content
     .split('\n')
@@ -145,25 +155,14 @@ function readFileLineLabel(args: Record<string, unknown>, result: Record<string,
     .filter((line): line is string => !!line)
     .map(Number)
 
-  if (lines.length > 0) {
-    const start = lines[0]!
-    const end = lines[lines.length - 1]!
-
-    return start === end ? `L${start}` : `L${start}-${end}`
-  }
-
-  const offset = numericField(args, 'offset')
-  const limit = numericField(args, 'limit')
-
-  if (offset === undefined || offset < 1) {
+  if (lines.length === 0) {
     return ''
   }
 
-  if (limit === undefined || limit <= 1) {
-    return `L${offset}`
-  }
+  const start = lines[0]!
+  const end = lines[lines.length - 1]!
 
-  return `L${offset}-${offset + limit - 1}`
+  return start === end ? `L${start}` : `L${start}-${end}`
 }
 
 const TOOL_META: Record<ToolTitleKey, ToolMetaSpec> = {
